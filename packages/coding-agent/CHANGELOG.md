@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added a session-level `toolsPromptPolicy` option (`"auto"` by default, `"frozen"` rebuilds the system prompt only on first application while roster drift surfaces through tool-roster notices), protecting provider prefix caches on long sessions with dynamic tool sets ([#12444](https://github.com/can1357/oh-my-pi/pull/12444) by [@LaelLuo](https://github.com/LaelLuo)).
+
 ### Fixed
 
 - Fixed `omp auth-broker token` and `omp auth-gateway token` exiting silently without creating a token on Windows when no token file exists yet; token and config reads now use `node:fs` instead of `Bun.file`.
