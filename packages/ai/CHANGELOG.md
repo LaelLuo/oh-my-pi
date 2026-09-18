@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added native video input on the OpenAI-compatible Chat Completions transport: image blocks whose mimeType starts with `video/` serialize as `video_url` content parts for models declaring the new `video` input modality ([#12443](https://github.com/can1357/oh-my-pi/pull/12443) by [@LaelLuo](https://github.com/LaelLuo)).
+
 ### Fixed
 
 - Fixed auth-broker client config resolution failing silently on Windows when reading the token file or `config.yml`; reads now use `node:fs` instead of `Bun.file`.
