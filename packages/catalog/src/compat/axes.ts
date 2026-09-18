@@ -292,7 +292,7 @@ export const AXES: Readonly<Record<string, AxisDef>> = {
 	"delegation-bias": { key: "delegationBias", set: "catalog", shape: "scalar", values: DELEGATION_BIASES },
 	"edit-prompt-variant": { key: "editPromptVariant", set: "catalog", shape: "scalar", values: ["full", "compact"] },
 	"edit-revision": { key: "editRevision", set: "catalog", shape: "scalar" },
-	"input-modalities": { key: "inputModalities", set: "catalog", shape: "array", values: ["text", "image"] },
+	"input-modalities": { key: "inputModalities", set: "catalog", shape: "array", values: ["text", "image", "video"] },
 	"limits-patch": { key: "limitsPatch", set: "catalog", shape: "object" },
 	"long-context-cost": { key: "longContext", set: "catalog", shape: "object" },
 	"long-usage-limit-fallback": { key: "longUsageLimitFallback", set: "catalog", shape: "scalar" },

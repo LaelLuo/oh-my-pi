@@ -1,8 +1,9 @@
-// Contract: an image block whose mimeType declares video/* ships as a
-// `video_url` content part on the Chat Completions wire (multimodal extension
-// used by OpenAI-compatible providers with native video input, e.g. GLM),
-// inlined as a base64 data URL unless the block carries a url. Undecorated
-// image blocks keep the byte-for-byte `image_url` forms.
+// Contract: for a model whose input modalities declare `video`, an image
+// block whose mimeType declares video/* ships as a `video_url` content part
+// on the Chat Completions wire (multimodal extension used by
+// OpenAI-compatible providers with native video input, e.g. GLM), inlined as
+// a base64 data URL unless the block carries a url. Models that do not
+// declare `video` keep the byte-for-byte `image_url` forms for every block.
 import { describe, expect, it } from "bun:test";
 import { streamOpenAICompletions } from "@oh-my-pi/pi-ai/providers/openai-completions";
 import type { Context, FetchImpl, Message, Model, UserMessage } from "@oh-my-pi/pi-ai/types";
@@ -12,10 +13,11 @@ const MP4_B64 = Buffer.from("not-actually-an-mp4, but bytes are opaque here").to
 const VIDEO_URL = "https://blobs.example.com/0123456789abcdef0123456789abcdef.mp4";
 const PNG_B64 = Buffer.from("not-actually-a-png, but bytes are opaque here").toString("base64");
 
-function completionsModel(): Model<"openai-completions"> {
+function completionsModel(input: Model["input"] = ["text", "image", "video"]): Model<"openai-completions"> {
 	return {
 		...(getBundledModel("openai", "gpt-4o-mini") as Model<"openai-completions">),
 		api: "openai-completions",
+		input,
 	} satisfies Model<"openai-completions">;
 }
 
@@ -156,8 +158,41 @@ describe("video url parts", () => {
 		]);
 	});
 
+	it("keeps the image_url wire form for vision models that do not declare video", async () => {
+		const messages = [
+			userMessage([
+				{ type: "text", text: "what happens in this clip?" },
+				{ type: "image", data: MP4_B64, mimeType: "video/mp4" },
+			]),
+		];
+
+		const parts =
+			((await wireMessages(completionsModel(["text", "image"]), messages))[0]?.content as WirePart[]) ?? [];
+
+		expect(parts.some(part => part.type === "video_url")).toBe(false);
+		expect(parts.filter(part => part.type === "image_url")).toEqual([
+			{ type: "image_url", image_url: { url: `data:video/mp4;base64,${MP4_B64}` } },
+		]);
+	});
+
+	it("keeps the image_url wire form for undeclared video tool results", async () => {
+		const wire = await wireMessages(completionsModel(["text", "image"]), toolResultMessages("video/mp4"));
+		const attached = wire.find(
+			message =>
+				message.role === "user" &&
+				Array.isArray(message.content) &&
+				(message.content as WirePart[]).some(part => part.type === "image_url"),
+		);
+
+		const parts = (attached?.content as WirePart[]) ?? [];
+		expect(parts).toEqual([
+			{ type: "text", text: "Attached image(s) from tool result:" },
+			{ type: "image_url", image_url: { url: `data:video/mp4;base64,${MP4_B64}` } },
+		]);
+	});
+
 	it("omits video blocks for text-only models", async () => {
-		const model = { ...completionsModel(), input: ["text"] as Model["input"] };
+		const model = completionsModel(["text"]);
 		const messages = [
 			userMessage([
 				{ type: "text", text: "what happens in this clip?" },

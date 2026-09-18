@@ -2112,6 +2112,7 @@ export function convertMessages(
 				});
 			} else {
 				const supportsImages = isOpenAICompletionsVisionSupported(model);
+				const supportsVideo = model.input.includes("video");
 				const content: ChatCompletionContentPart[] = [];
 				let omittedImages = false;
 				for (const item of msg.content) {
@@ -2122,7 +2123,7 @@ export function convertMessages(
 							type: "text",
 							text,
 						} satisfies ChatCompletionContentPartText);
-					} else if (supportsImages && item.mimeType.startsWith("video/")) {
+					} else if (supportsVideo && item.mimeType.startsWith("video/")) {
 						content.push({
 							type: "video_url",
 							video_url: {
@@ -2412,8 +2413,9 @@ export function convertMessages(
 					.map(c => (c as TextContent).text)
 					.join("\n");
 				const supportsImages = isOpenAICompletionsVisionSupported(model);
+				const supportsVideo = model.input.includes("video");
 				const hasImages = toolMsg.content.some(c => c.type === "image");
-				const omittedImages = hasImages && !supportsImages;
+				const omittedImages = hasImages && !supportsImages && !supportsVideo;
 
 				// Always send tool result with text (or placeholder if only images)
 				const hasText = textResult.length > 0;
@@ -2437,11 +2439,11 @@ export function convertMessages(
 				}
 				params.push(toolResultMsg);
 
-				if (hasImages && supportsImages) {
+				if (hasImages && (supportsImages || supportsVideo)) {
 					for (const block of toolMsg.content) {
 						if (block.type === "image") {
 							const url = block.url ?? `data:${block.mimeType};base64,${block.data}`;
-							if (block.mimeType.startsWith("video/")) {
+							if (supportsVideo && block.mimeType.startsWith("video/")) {
 								videoBlocks.push({
 									type: "video_url",
 									video_url: { url },

@@ -60,8 +60,8 @@ function applyEffectiveFallbackRates(
 }
 
 /** Narrow a compiled `input-modalities` axis value to the model input union. */
-function isInputModalities(value: unknown): value is ("text" | "image")[] {
-	return Array.isArray(value) && value.every(entry => entry === "text" || entry === "image");
+function isInputModalities(value: unknown): value is ("text" | "image" | "video")[] {
+	return Array.isArray(value) && value.every(entry => entry === "text" || entry === "image" || entry === "video");
 }
 
 /**
