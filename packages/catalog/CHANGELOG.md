@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added a `video` input modality: `Model.input`, the `input-modalities` axis, build-time narrowing, the model-cache row validator, and the dynamic-model input guard accept `video`; `glm-5.3-flash` (zai / zhipu-coding-plan) declares native video input ([#12443](https://github.com/can1357/oh-my-pi/pull/12443) by [@LaelLuo](https://github.com/LaelLuo)).
+
 ## [18.2.5] - 2026-09-17
 
 ### Added
