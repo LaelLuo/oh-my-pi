@@ -401,7 +401,10 @@ function pickModelDisplayName(model: CursorModelDetailsValue, fallbackId: string
  * Without a reference, families whose native catalogs are multimodal
  * (anthropic, gemini, openai) fall back to id classification.
  */
-export function resolveCursorInput(id: string, referenceInput?: ("text" | "image")[]): ("text" | "image")[] {
+export function resolveCursorInput(
+	id: string,
+	referenceInput?: ("text" | "image" | "video")[],
+): ("text" | "image" | "video")[] {
 	if (referenceInput) {
 		return referenceInput;
 	}

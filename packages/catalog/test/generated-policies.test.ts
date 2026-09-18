@@ -395,7 +395,7 @@ describe("generated model policies", () => {
 		}
 	});
 
-	it("pins zai glm-5.3-flash to the 1M tier and restores its native image input", () => {
+	it("pins zai glm-5.3-flash to the 1M tier and restores its native image and video input", () => {
 		const models = [
 			createSpec({
 				id: "glm-5.3-flash",
@@ -417,8 +417,9 @@ describe("generated model policies", () => {
 			expect(model.contextWindow).toBe(1_000_000);
 			expect(model.maxTokens).toBe(131_072);
 			// Natively multimodal despite the missing `v` marker; upstream
-			// metadata reports the flash SKU as text-only.
-			expect(model.input).toEqual(["text", "image"]);
+			// metadata reports the flash SKU as text-only. Video rides the
+			// OpenAI-compatible `video_url` part.
+			expect(model.input).toEqual(["text", "image", "video"]);
 			// Same mandatory low/high/max ladder as the GLM-5.3 base line.
 			expect(model.thinking?.efforts).toEqual([Effort.Low, Effort.High, Effort.Max]);
 			expect(model.thinking?.requiresEffort).toBe(true);

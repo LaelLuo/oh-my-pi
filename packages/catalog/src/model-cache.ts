@@ -257,7 +257,7 @@ function isMaterializedModel(value: unknown): value is PersistedModel<Api> {
 		typeof model.reasoning !== "boolean" ||
 		!Array.isArray(model.input) ||
 		model.input.length === 0 ||
-		model.input.some(input => input !== "text" && input !== "image") ||
+		model.input.some(input => input !== "text" && input !== "image" && input !== "video") ||
 		model.headers !== undefined ||
 		!Object.hasOwn(model, "supportsComputerUseConfig") ||
 		(model.supportsComputerUseConfig !== null && typeof model.supportsComputerUseConfig !== "boolean")

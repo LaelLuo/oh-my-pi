@@ -62,6 +62,7 @@ import type {
 	ChatCompletionContentPart,
 	ChatCompletionContentPartImage,
 	ChatCompletionContentPartText,
+	ChatCompletionContentPartVideo,
 	ChatCompletionMessageFunctionToolCall,
 	ChatCompletionMessageParam,
 	ChatCompletionTool,
@@ -2111,6 +2112,7 @@ export function convertMessages(
 				});
 			} else {
 				const supportsImages = isOpenAICompletionsVisionSupported(model);
+				const supportsVideo = model.input.includes("video");
 				const content: ChatCompletionContentPart[] = [];
 				let omittedImages = false;
 				for (const item of msg.content) {
@@ -2121,6 +2123,13 @@ export function convertMessages(
 							type: "text",
 							text,
 						} satisfies ChatCompletionContentPartText);
+					} else if (supportsVideo && item.mimeType.startsWith("video/")) {
+						content.push({
+							type: "video_url",
+							video_url: {
+								url: item.url ?? `data:${item.mimeType};base64,${item.data}`,
+							},
+						} satisfies ChatCompletionContentPartVideo);
 					} else if (supportsImages) {
 						content.push({
 							type: "image_url",
@@ -2392,6 +2401,7 @@ export function convertMessages(
 		} else if (msg.role === "toolResult") {
 			// Batch consecutive tool results and collect all images
 			const imageBlocks: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+			const videoBlocks: Array<{ type: "video_url"; video_url: { url: string } }> = [];
 			let j = i;
 
 			for (; j < transformedMessages.length && transformedMessages[j].role === "toolResult"; j++) {
@@ -2403,8 +2413,9 @@ export function convertMessages(
 					.map(c => (c as TextContent).text)
 					.join("\n");
 				const supportsImages = isOpenAICompletionsVisionSupported(model);
+				const supportsVideo = model.input.includes("video");
 				const hasImages = toolMsg.content.some(c => c.type === "image");
-				const omittedImages = hasImages && !supportsImages;
+				const omittedImages = hasImages && !supportsImages && !supportsVideo;
 
 				// Always send tool result with text (or placeholder if only images)
 				const hasText = textResult.length > 0;
@@ -2428,15 +2439,21 @@ export function convertMessages(
 				}
 				params.push(toolResultMsg);
 
-				if (hasImages && supportsImages) {
+				if (hasImages && (supportsImages || supportsVideo)) {
 					for (const block of toolMsg.content) {
 						if (block.type === "image") {
-							imageBlocks.push({
-								type: "image_url",
-								image_url: {
-									url: block.url ?? `data:${block.mimeType};base64,${block.data}`,
-								},
-							});
+							const url = block.url ?? `data:${block.mimeType};base64,${block.data}`;
+							if (supportsVideo && block.mimeType.startsWith("video/")) {
+								videoBlocks.push({
+									type: "video_url",
+									video_url: { url },
+								});
+							} else {
+								imageBlocks.push({
+									type: "image_url",
+									image_url: { url },
+								});
+							}
 						}
 					}
 				}
@@ -2445,7 +2462,7 @@ export function convertMessages(
 			i = j - 1;
 
 			// After all consecutive tool results, add a single user message with all images
-			if (imageBlocks.length > 0) {
+			if (imageBlocks.length > 0 || videoBlocks.length > 0) {
 				if (compat.requiresAssistantAfterToolResult) {
 					params.push({
 						role: "assistant",
@@ -2458,9 +2475,13 @@ export function convertMessages(
 					content: [
 						{
 							type: "text",
-							text: "Attached image(s) from tool result:",
+							text:
+								videoBlocks.length > 0
+									? "Attached media from tool result:"
+									: "Attached image(s) from tool result:",
 						},
 						...imageBlocks,
+						...videoBlocks,
 					],
 				});
 				lastRole = "user";
