@@ -2,18 +2,25 @@
 // the system prompt byte-stable after its first assembly — later
 // tool-signature drift follows the frozen path (roster notice, no rebuild) —
 // while the default (`"auto"`) and an explicit forcePromptRefresh keep today's
-// rebuild behavior.
+// rebuild behavior. The SDK's createAgentSession forwards the option through.
 import { afterEach, describe, expect, it, type Mock, vi } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
 import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
+import { ModelRegistry, type ProviderConfigInput } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { AgentSessionConfig } from "@oh-my-pi/pi-coding-agent/session/agent-session-types";
+import { createAgentSession, type ExtensionFactory } from "@oh-my-pi/pi-coding-agent/sdk";
+import { removeSyncWithRetries } from "@oh-my-pi/pi-utils";
+import { createInMemoryAuthStorage } from "./helpers/agent-session-setup";
 
 function createModel(): Model<"openai-responses"> {
 	return buildModel({
@@ -172,5 +179,80 @@ describe("tools prompt policy", () => {
 
 		const toolNames = harness.session.agent.state.tools.map(tool => tool.name).sort();
 		expect(toolNames).toEqual(["bash", "read"]);
+	});
+
+	it("createAgentSession forwards toolsPromptPolicy to the session", async () => {
+		const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-sdk-policy-fixture-"));
+		const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-sdk-policy-"));
+		const authStorage = createInMemoryAuthStorage();
+		const modelRegistry = new ModelRegistry(authStorage, path.join(fixtureDir, "models.yml"));
+		const providerConfig: ProviderConfigInput = {
+			baseUrl: "https://example.invalid/v1",
+			apiKey: "RUNTIME_KEY",
+			api: "openai-completions",
+			models: [
+				{
+					id: "frozen-model",
+					name: "Frozen Model",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128_000,
+					maxTokens: 8_192,
+				},
+			],
+		};
+		const providerExtension: ExtensionFactory = pi => {
+			pi.registerProvider("runtime-provider", providerConfig);
+		};
+		const sessionOptions = (toolsPromptPolicy: "auto" | "frozen") => ({
+			cwd: tempDir,
+			agentDir: tempDir,
+			authStorage,
+			modelRegistry,
+			sessionManager: SessionManager.inMemory(),
+			disableExtensionDiscovery: true,
+			extensions: [providerExtension],
+			skills: [],
+			contextFiles: [],
+			promptTemplates: [],
+			slashCommands: [],
+			enableMCP: false,
+			enableLsp: false,
+			skipPythonPreflight: true,
+			rules: [],
+			preloadedCustomToolPaths: [],
+			toolNames: ["read"],
+			modelPattern: "runtime-provider/frozen-model",
+			toolsPromptPolicy,
+		});
+
+		let auto: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
+		let frozen: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
+		try {
+			auto = (await createAgentSession(sessionOptions("auto"))).session;
+			await auto.setActiveToolPresentation(["read"], []);
+			const autoPromptBefore = [...auto.agent.state.systemPrompt];
+			await auto.setActiveToolPresentation(["read", "write"], []);
+			expect(auto.agent.state.systemPrompt).not.toEqual(autoPromptBefore);
+
+			frozen = (await createAgentSession(sessionOptions("frozen"))).session;
+			await frozen.setActiveToolPresentation(["read"], []);
+			const frozenPromptBefore = [...frozen.agent.state.systemPrompt];
+			await frozen.setActiveToolPresentation(["read", "write"], []);
+			expect(frozen.agent.state.systemPrompt).toEqual(frozenPromptBefore);
+		} finally {
+			await auto?.dispose();
+			await frozen?.dispose();
+			authStorage.close();
+			// Best-effort: Windows releases session file handles with a delay
+			// after dispose; the OS temp cleanup covers the leftovers.
+			try {
+				removeSyncWithRetries(tempDir);
+				removeSyncWithRetries(fixtureDir);
+			} catch {
+				/* ignore */
+			}
+		}
 	});
 });
